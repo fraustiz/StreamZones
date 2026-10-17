@@ -14,6 +14,7 @@ import { Alerts, showToast, UserStore } from "@webpack/common";
 import type { ComponentType } from "react";
 
 import { Native } from "./bridge";
+import { rememberedZone } from "./presets";
 import { settings } from "./settings";
 
 const logger = new Logger("StreamZones");
@@ -67,27 +68,34 @@ function closeMirror() {
     void Native.stop();
 }
 
+// log: the file that says what was tried, when the main process could be reached to write it
+function showStartFailure(error: string, log?: string) {
+    // a dialog rather than a toast: a toast cuts long text off, and this is what has to be read or sent on
+    Alerts.show({
+        title: "Le partage de la zone n'a pas pu démarrer",
+        body: (
+            <div>
+                <Paragraph>{error}</Paragraph>
+                <Paragraph>Quitte Discord depuis la zone de notification (clic droit sur son icône → Quitter), relance-le et réessaie. C'est nécessaire après un changement de disposition des écrans ou une mise à jour du plugin.</Paragraph>
+                {log && <>
+                    <Paragraph>Si ça continue, ce fichier dit ce qui a été tenté :</Paragraph>
+                    <Paragraph>
+                        <code style={{ userSelect: "text", wordBreak: "break-all" }}>{log}</code>
+                    </Paragraph>
+                </>}
+            </div>
+        ),
+        confirmText: "OK"
+    });
+}
+
 /** Lets the user draw a zone and opens its mirror window. Resolves with that window as a stream source. */
 async function pickZone(): Promise<StreamSource | null> {
-    const result = await Native.start(settings.store.showMirror, settings.store.lastZone);
+    const result = await Native.start(settings.store.showMirror, rememberedZone(settings.store.lastZone));
     if (result.status === "cancelled") return null;
     if (result.status === "failed") {
         logger.error("Could not open the mirror window:", result.error);
-        // a dialog rather than a toast: a toast cuts long text off, and this is what has to be read or sent on
-        Alerts.show({
-            title: "Le partage de la zone n'a pas pu démarrer",
-            body: (
-                <div>
-                    <Paragraph>{result.error}</Paragraph>
-                    <Paragraph>Si la disposition de tes écrans vient de changer, quitte Discord depuis la zone de notification, relance-le et réessaie.</Paragraph>
-                    <Paragraph>Si ça continue, ce fichier dit ce qui a été tenté :</Paragraph>
-                    <Paragraph>
-                        <code style={{ userSelect: "text", wordBreak: "break-all" }}>{result.log}</code>
-                    </Paragraph>
-                </div>
-            ),
-            confirmText: "OK"
-        });
+        showStartFailure(result.error, result.log);
         return null;
     }
 
@@ -141,7 +149,7 @@ export const zoneShareMembers = {
     // goLive is the picker's own function: it starts the stream with the quality and sound
     // chosen in the picker, then closes the picker
     onZoneTab(goLive: (source: StreamSource) => Promise<void>) {
-        void pickZone().then(async source => {
+        pickZone().then(async source => {
             if (!source) return;
 
             await goLive(source);
@@ -153,6 +161,11 @@ export const zoneShareMembers = {
                 closeMirror();
                 showToast("Le partage de la zone n'a pas démarré.", "failure");
             }, START_TIMEOUT_MS);
+        }).catch(err => {
+            // e.g. the main process still runs an older build: never let the click just do nothing
+            logger.error("Zone sharing failed:", err);
+            if (mirrorHandle) closeMirror();
+            showStartFailure(String(err));
         });
     },
 

@@ -10,7 +10,7 @@ import { join } from "path";
 import { promisify } from "util";
 
 import { closeMirror, closeMirrorWith, LastZone, log, logPath, openMirror, selectZone, whenMirrorClosed } from "./mirror";
-import { isPreset } from "./presets";
+import { rememberedZone } from "./presets";
 import { applyUpdate as installUpdate, checkForUpdate as lookForUpdate, findClone, UpdateState } from "./updater";
 
 const PAGES_DIR = join(DATA_DIR, "StreamZones");
@@ -42,7 +42,7 @@ export async function start({ sender }: IpcMainInvokeEvent, showMirror: boolean,
 
     try {
         // it comes from a settings file: anything unusable just means nothing is offered
-        const remembered = typeof last?.displayId === "number" && isPreset(last.preset) ? last : null;
+        const remembered = rememberedZone(last);
 
         const selection = await selectZone(PAGES_DIR, remembered);
         if (!selection) return { status: "cancelled" };

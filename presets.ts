@@ -25,6 +25,20 @@ export function isPreset(value: unknown): value is Preset {
         && typeof y === "number" && Number.isFinite(y);
 }
 
+/**
+ * A plain copy of the zone remembered in the settings, or null if it is unusable.
+ * The settings hand out proxies, and a proxy cannot be sent to the main process: Electron refuses
+ * it with "An object could not be cloned".
+ */
+export function rememberedZone(value: unknown): { displayId: number; preset: Preset; } | null {
+    if (typeof value !== "object" || value === null) return null;
+
+    const { displayId, preset } = value as Record<string, unknown>;
+    if (typeof displayId !== "number" || !isPreset(preset)) return null;
+
+    return { displayId, preset: { ratio: preset.ratio, x: preset.x, y: preset.y } };
+}
+
 /** The biggest zone of that format that fits the screen, placed by position. In whole pixels. */
 export function presetZone(screen: { width: number; height: number; }, ratio: number, x: number, y: number) {
     const width = Math.min(screen.width, Math.round(screen.height * ratio));
